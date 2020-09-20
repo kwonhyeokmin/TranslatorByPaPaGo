@@ -33,13 +33,13 @@ class Translator(object):
 
 
 if __name__ == "__main__":
-    MAXIMUM_WORD_COUNT = 160
+    MAXIMUM_WORD_COUNT = 100
 
     with open('database_properties.json') as f:
         db_info = json.loads(f.read())
     conn = pymysql.connect(**db_info)
 
-    select_sql = """select image_id, id, caption from a_text where caption_kr is null;"""
+    select_sql = """select caption from a_text_bird where caption_kr is null;"""
 
     # papago api 정보 로드
     user_sql = """
@@ -59,26 +59,30 @@ if __name__ == "__main__":
     # with open('secret_properties.json') as f:
     #     info = json.loads(f.read())
 
-    try:
-        for info in infos:
+
+    for info in infos:
+        try:
             translator = Translator(info)
             for _ in tqdm(range(info['left_count'])):
                 with conn.cursor() as cursor:
                     cursor.execute(select_sql)
                     row = cursor.fetchone()
-                    image_id, id, caption = row
+                    caption = row[0]
                 result = translator.run(caption)
                 result = result.replace("'", "\\'")
                 # now = datetime.datetime.now()
                 # nowDatetime = now.strftime('%Y-%m-%d %H:%M:%S')
                 with conn.cursor() as cursor:
                     update_sql = """
-                    update a_text set caption_kr = '{}', reg_dt = CURRENT_TIMESTAMP, user_id = {} where image_id = {} and id = {};
-                    """.format(result, info['user_id'], image_id, id)
+                    update a_text_bird set caption_kr = '{}', reg_dt = CURRENT_TIMESTAMP, user_id = {} where caption = '{}';
+                    """.format(result.replace("'", "\\'").replace('"', '\\"'), info['user_id'], caption.replace("'", "\\'").replace('"', '\\"'))
                     cursor.execute(update_sql)
                 conn.commit()
-    except HTTPError as e:
-        raise APIUsageExceededError("api 사용량을 초과하였습니다")
-    except ValueError as e:
-        print(e)
+        except HTTPError as e:
+            print('user_id: %d' % user_id)
+            raise APIUsageExceededError("api 사용량을 초과하였습니다")
+        except ValueError as e:
+            print(e)
+        except APIUsageExceededError as e:
+            continue
     conn.close()
